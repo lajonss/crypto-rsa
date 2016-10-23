@@ -265,7 +265,10 @@ void generate_key() {
 }
 
 void read_enc_key() {
-    FILE *in = fopen(key_name_public, "rb");
-    errnull(in);
-    
+  FILE *in = fopen(key_name_public, "rb");
+  errnull(in);
 }
+
+void encrypt_file(char *filename) {}
+void read_dec_key() {}
+void decrypt_file(char *filename) {}
