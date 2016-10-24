@@ -49,92 +49,6 @@ void dump(RSA *rsa) {
     RSA_print_fp(stdout, rsa, 0);
 }
 
-// void do_encrypt() {
-//   unsigned const char pass[16] = {'a', 'b', 'd', 'e', 'f', 'x', 'd', 'd',
-//                                   'a', 'b', 'd', 'e', 'f', 'x', 'd', 'd'};
-//   CAMELLIA_KEY key;
-//   Camellia_set_key(pass, 128, &key);
-//   FILE *file_in = fopen(input, "rb");
-//   if (!file_in) {
-//     printf("Failed to open input file: %s\n", input);
-//     exit(-1);
-//   }
-//   FILE *file_out = fopen(output, "wb");
-//   if (!file_out) {
-//     printf("Failed to open output file: %s\n", output);
-//     exit(-1);
-//   }
-//   unsigned char bufor_in[BLOCK_SIZE];
-//   unsigned char bufor_out[BLOCK_SIZE];
-//   unsigned char ivec[BLOCK_SIZE];
-//   memset(ivec, 0, BLOCK_SIZE);
-//
-//   int operation_mode;
-//   if (decrypt)
-//     operation_mode = CAMELLIA_DECRYPT;
-//   else
-//     operation_mode = CAMELLIA_ENCRYPT;
-//
-//   size_t rd;
-//   int bufor_out_ready = 0;
-//   while ((rd = fread(bufor_in, sizeof(char), BLOCK_SIZE, file_in))) {
-//     if (ferror(file_in)) {
-//       printf("Reading error\n");
-//       exit(-1);
-//     }
-//     if (operation_mode == CAMELLIA_DECRYPT && bufor_out_ready)
-//       fwrite(bufor_out, sizeof(char), BLOCK_SIZE, file_out);
-//     if (rd < BLOCK_SIZE) {
-//       printf("filling: %zd\n", BLOCK_SIZE - rd);
-//       for (size_t i = BLOCK_SIZE; i > rd; i--)
-//         bufor_in[i - 1] = BLOCK_SIZE - rd;
-//     }
-//     if (working_mode == ECB_MODE) {
-//       start_measure_time();
-//       Camellia_ecb_encrypt(bufor_in, bufor_out, &key, operation_mode);
-//       total_time += stop_measure_time();
-//     } else {
-//       start_measure_time();
-//       Camellia_cbc_encrypt(bufor_in, bufor_out, BLOCK_SIZE, &key, ivec,
-//                            operation_mode);
-//       total_time += stop_measure_time();
-//     }
-//     bufor_out_ready = 1;
-//     if (operation_mode == CAMELLIA_ENCRYPT)
-//       fwrite(bufor_out, sizeof(char), BLOCK_SIZE, file_out);
-//     if (ferror(file_out)) {
-//       printf("Writing error\n");
-//       exit(-1);
-//     }
-//     if (rd < BLOCK_SIZE)
-//       break;
-//   }
-//   if (operation_mode == CAMELLIA_DECRYPT) {
-//     fwrite(bufor_out, sizeof(char), BLOCK_SIZE - bufor_out[BLOCK_SIZE - 1],
-//            file_out);
-//     printf("decrypt fill: %d\n", bufor_out[BLOCK_SIZE - 1]);
-//   } else if (!rd) {
-//     // Pawle, zakomentowanie tego bloku kodu nie zaburza dzialania programu,
-//     // sprawdz :)
-//     memset(bufor_in, BLOCK_SIZE, BLOCK_SIZE);
-//     if (working_mode == ECB_MODE) {
-//       start_measure_time();
-//       Camellia_ecb_encrypt(bufor_in, bufor_out, &key, operation_mode);
-//       total_time += stop_measure_time();
-//     } else {
-//       start_measure_time();
-//       Camellia_cbc_encrypt(bufor_in, bufor_out, BLOCK_SIZE, &key, ivec,
-//                            operation_mode);
-//       total_time += stop_measure_time();
-//     }
-//     fwrite(bufor_out, sizeof(char), BLOCK_SIZE, file_out);
-//   }
-//
-//   fclose(file_in);
-//   fclose(file_out);
-//   printf("done\n");
-// }
-
 void generate_key();
 void read_enc_key();
 void read_dec_key();
@@ -142,6 +56,7 @@ void decrypt_file(char *filename);
 void encrypt_file(char *filename);
 
 int main(int argc, char **argv) {
+  srand(76);
   int c;
   set_program_name(argv[0]);
 
@@ -294,9 +209,12 @@ void encrypt_file(char *filename) {
   strcpy(filename_out, filename);
   strcat(filename_out, ".out");
 
+  if (verbose)
+    printf("Encrypting: %s -> %s\n", filename, filename_out);
+
   FILE *in = fopen(filename, "rb");
   errnull(in);
-  FILE *out = fopen(filename, "wb");
+  FILE *out = fopen(filename_out, "wb");
   errnull(out);
 
   unsigned char *buffer_in =
@@ -305,12 +223,19 @@ void encrypt_file(char *filename) {
       (unsigned char *)malloc(sizeof(unsigned char) * key_length);
   size_t rd;
   int enc;
+  reset_measured_time();
+
   while ((rd = fread(buffer_in, sizeof(unsigned char), key_length - 12, in)) >
          0) {
+    start_measure_time();
     enc = RSA_public_encrypt(rd, buffer_in, buffer_out, key, RSA_PKCS1_PADDING);
+    stop_measure_time();
     openssl_errneg(enc);
     fwrite(buffer_out, sizeof(unsigned char), enc, out);
   }
+
+  printf("Encrypted file %s in %" PRIu64 " microseconds\n", filename,
+         get_measured_time());
 
   erreof(fclose(in));
   erreof(fclose(out));
@@ -318,5 +243,64 @@ void encrypt_file(char *filename) {
   free(buffer_out);
   free(filename_out);
 }
-void read_dec_key() {}
-void decrypt_file(char *filename) {}
+
+void read_dec_key() {
+  struct stat in_params;
+  errneg(stat(key_name_private, &in_params));
+
+  FILE *in = fopen(key_name_private, "rb");
+  errnull(in);
+
+  unsigned char *buffer =
+      (unsigned char *)malloc(sizeof(unsigned char) * in_params.st_size);
+  unsigned char *pp = buffer;
+  if (fread(buffer, sizeof(unsigned char), in_params.st_size, in) == 0)
+    errhandle();
+  erreof(fclose(in));
+
+  key = RSA_new();
+  d2i_RSAPrivateKey(&key, (const unsigned char **)&pp, in_params.st_size);
+  free(buffer);
+  dump(key);
+  key_length = RSA_size(key);
+}
+
+void decrypt_file(char *filename) {
+  char *filename_out = (char *)malloc(sizeof(char) * (strlen(filename) + 5));
+  strcpy(filename_out, filename);
+  strcat(filename_out, ".out");
+
+  if (verbose)
+    printf("Decrypting: %s -> %s\n", filename, filename_out);
+
+  FILE *in = fopen(filename, "rb");
+  errnull(in);
+  FILE *out = fopen(filename_out, "wb");
+  errnull(out);
+
+  unsigned char *buffer_in =
+      (unsigned char *)malloc(sizeof(unsigned char) * key_length);
+  unsigned char *buffer_out =
+      (unsigned char *)malloc(sizeof(unsigned char) * key_length);
+  size_t rd;
+  int dec;
+
+  reset_measured_time();
+  while ((rd = fread(buffer_in, sizeof(unsigned char), key_length, in)) > 0) {
+    start_measure_time();
+    dec =
+        RSA_private_decrypt(rd, buffer_in, buffer_out, key, RSA_PKCS1_PADDING);
+    stop_measure_time();
+    openssl_errneg(dec);
+    fwrite(buffer_out, sizeof(unsigned char), dec, out);
+  }
+
+  printf("Decrypted file %s in %" PRIu64 " microseconds\n", filename,
+         get_measured_time());
+
+  erreof(fclose(in));
+  erreof(fclose(out));
+  free(buffer_in);
+  free(buffer_out);
+  free(filename_out);
+}
