@@ -49,6 +49,11 @@ void openssl_errnull(int x) {
     openssl_errhandle();
 }
 
+void openssl_errneg(int x) {
+  if (x < 0)
+    openssl_errhandle();
+}
+
 // http://stackoverflow.com/a/10192994
 void start_measure_time() { clock_gettime(CLOCK_MONOTONIC_RAW, &start); }
 

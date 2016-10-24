@@ -7,8 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <openssl/rsa.h>
+
+#include <sys/stat.h>
+//#include <sys/types.h>
 
 #define RSA_EXPONENT 17
 
@@ -265,10 +269,54 @@ void generate_key() {
 }
 
 void read_enc_key() {
+  struct stat in_params;
+  errneg(stat(key_name_public, &in_params));
+
   FILE *in = fopen(key_name_public, "rb");
   errnull(in);
+
+  unsigned char *buffer =
+      (unsigned char *)malloc(sizeof(unsigned char) * in_params.st_size);
+  unsigned char *pp = buffer;
+  if (fread(buffer, sizeof(unsigned char), in_params.st_size, in) == 0)
+    errhandle();
+  erreof(fclose(in));
+
+  key = RSA_new();
+  d2i_RSAPublicKey(&key, (const unsigned char **)&pp, in_params.st_size);
+  free(buffer);
+  dump(key);
+  key_length = RSA_size(key);
 }
 
-void encrypt_file(char *filename) {}
+void encrypt_file(char *filename) {
+  char *filename_out = (char *)malloc(sizeof(char) * (strlen(filename) + 5));
+  strcpy(filename_out, filename);
+  strcat(filename_out, ".out");
+
+  FILE *in = fopen(filename, "rb");
+  errnull(in);
+  FILE *out = fopen(filename, "wb");
+  errnull(out);
+
+  unsigned char *buffer_in =
+      (unsigned char *)malloc(sizeof(unsigned char) * key_length);
+  unsigned char *buffer_out =
+      (unsigned char *)malloc(sizeof(unsigned char) * key_length);
+  size_t rd;
+  int enc;
+  while ((rd = fread(buffer_in, sizeof(unsigned char), key_length - 12, in)) >
+         0) {
+    enc = RSA_public_encrypt(rd, buffer_in, buffer_out, key, RSA_PKCS1_PADDING);
+    openssl_errneg(enc);
+    fwrite(buffer_out, sizeof(unsigned char), enc, out);
+  }
+
+  erreof(fclose(in));
+  erreof(fclose(out));
+  free(buffer_in);
+  free(buffer_out);
+  free(filename_out);
+}
 void read_dec_key() {}
 void decrypt_file(char *filename) {}
