@@ -19,6 +19,8 @@
 static int mode_generate = 0;
 static int mode_encrypt = 0;
 static int mode_decrypt = 0;
+static int mode_verify = 0;
+static int mode_sign = 0;
 static int verbose = 0;
 static int check_key = 0;
 
@@ -52,8 +54,12 @@ void dump(RSA *rsa) {
 void generate_key();
 void read_enc_key();
 void read_dec_key();
+void read_sign_key();
+void read_verify_key();
 void decrypt_file(char *filename);
 void encrypt_file(char *filename);
+void sign_file(char *filename);
+void verify_file(char *filename);
 
 int main(int argc, char **argv) {
   srand(76);
@@ -67,11 +73,13 @@ int main(int argc, char **argv) {
         {"encrypt", required_argument, 0, 'e'},
         {"help", no_argument, 0, 'h'},
         {"decrypt", required_argument, 0, 'd'},
+        {"sign", required_argument, 0, 's'},
+        {"verify", required_argument, 0, 'V'}
         {"key-length", required_argument, 0, 'l'},
         {"verbose", no_argument, 0, 'v'},
         {"check", no_argument, 0, 'c'},
         {0, 0, 0, 0}};
-    c = getopt_long(argc, argv, "g:e:d:l:vch?", long_options, &option_index);
+    c = getopt_long(argc, argv, "g:e:d:l:vV:s:ch?", long_options, &option_index);
     if (c == -1)
       break;
     switch (c) {
@@ -85,6 +93,14 @@ int main(int argc, char **argv) {
       break;
     case 'd':
       mode_decrypt = 1;
+      set_key_name(optarg);
+      break;
+    case 'V':
+      mode_verify = 1;
+      set_key_name(optarg);
+      break;
+    case 's':
+      mode_sign = 1;
       set_key_name(optarg);
       break;
     case 'l':
@@ -118,6 +134,14 @@ int main(int argc, char **argv) {
     read_dec_key();
     while (optind < argc)
       decrypt_file(argv[optind++]);
+  } else if (mode_sign) {
+    read_sign_key();
+    while (optind < argc)
+      sign_file(argv[optind++]);
+  } else if (mode_verify) {
+    read_verify_key();
+    while(optind < argc)
+      verify_file(argv[optind++]);
   }
 
   if (key)
@@ -303,4 +327,20 @@ void decrypt_file(char *filename) {
   free(buffer_in);
   free(buffer_out);
   free(filename_out);
+}
+
+void sign_file(char *filename) {
+
+}
+
+void verify_file(char *filename) {
+
+}
+
+void read_sign_key() {
+
+}
+
+void read_verify_key() {
+
 }
