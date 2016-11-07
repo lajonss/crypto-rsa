@@ -404,7 +404,11 @@ void verify_file(char *filename, char *out_filename) {
 
   unsigned int message_size = 64;
   int ret = RSA_verify(NID_sha512, in_buffer, message_size, buffer_out, siglen, key);
-  openssl_errnull(ret);
+  if(ret != 1) {
+    printf("WARNING! File %s doesn't match sign %s.\n", filename, out_filename);
+  } else {
+    printf("File %s matches sign %s.\n", filename, out_filename);
+  }
 
   free(buffer_out);
 }
