@@ -9,12 +9,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <openssl/objects.h>
 #include <openssl/rsa.h>
+#include <openssl/sha.h>
 
 #include <sys/stat.h>
 //#include <sys/types.h>
 
 #define RSA_EXPONENT 17
+#define SHA_CHUNK 512
 
 static int mode_generate = 0;
 static int mode_encrypt = 0;
@@ -58,7 +61,7 @@ void read_sign_key();
 void read_verify_key();
 void decrypt_file(char *filename);
 void encrypt_file(char *filename);
-void sign_file(char *filename);
+void sign_file(char *filename, char *out_filename);
 void verify_file(char *filename);
 
 int main(int argc, char **argv) {
@@ -74,7 +77,7 @@ int main(int argc, char **argv) {
         {"help", no_argument, 0, 'h'},
         {"decrypt", required_argument, 0, 'd'},
         {"sign", required_argument, 0, 's'},
-        {"verify", required_argument, 0, 'V'}
+        {"verify", required_argument, 0, 'V'},
         {"key-length", required_argument, 0, 'l'},
         {"verbose", no_argument, 0, 'v'},
         {"check", no_argument, 0, 'c'},
@@ -136,8 +139,14 @@ int main(int argc, char **argv) {
       decrypt_file(argv[optind++]);
   } else if (mode_sign) {
     read_sign_key();
-    while (optind < argc)
-      sign_file(argv[optind++]);
+    while (optind < argc) {
+      char *filename = argv[optind++];
+      if(optind == argc) {
+        fprintf(stderr, "Unpaired.\n");
+        exit(-1);
+      }
+      sign_file(filename, argv[optind++]);
+    }
   } else if (mode_verify) {
     read_verify_key();
     while(optind < argc)
@@ -329,8 +338,32 @@ void decrypt_file(char *filename) {
   free(filename_out);
 }
 
-void sign_file(char *filename) {
+void sign_file(char *filename, char *out_filename) {
+  SHA512_CTX ctx;
+  openssl_errzero(SHA512_Init(&ctx), "SHA512_Init");
 
+  FILE *in = fopen(filename, "rb");
+  errnull(in);
+  unsigned char in_buffer[SHA_CHUNK];
+  int rd;
+  do {
+    rd = fread(in_buffer, sizeof(unsigned char), SHA_CHUNK, in);
+    if(rd > 0) {
+      openssl_errzero(SHA512_Update(&ctx, in_buffer, rd), "SHA512_Update");
+    }
+  } while (rd == SHA_CHUNK);
+  erreof(fclose(in));
+
+  openssl_errzero(SHA512_Final(in_buffer, &ctx), "SHA512_Final");
+
+  unsigned char buffer_out[key_length];
+  unsigned int key_len = key_length;
+  openssl_errnull(RSA_sign(NID_sha512, in_buffer, SHA_CHUNK, buffer_out, &key_len, key));
+
+  FILE *out = fopen(out_filename, "wb");
+  errnull(out);
+  fwrite(buffer_out, sizeof(unsigned char), key_len, out);
+  erreof(fclose(out));
 }
 
 void verify_file(char *filename) {
@@ -338,9 +371,9 @@ void verify_file(char *filename) {
 }
 
 void read_sign_key() {
-
+  read_dec_key();
 }
 
 void read_verify_key() {
-
+  read_enc_key();
 }

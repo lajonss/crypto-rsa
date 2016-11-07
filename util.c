@@ -54,6 +54,13 @@ void openssl_errneg(int x) {
     openssl_errhandle();
 }
 
+void openssl_errzero(int x, char *place) {
+  if (x == 0) {
+    fprintf(stderr, "Openssl unknown error in %s.\n", place);
+    exit(-1);
+  }
+}
+
 // http://stackoverflow.com/a/10192994
 void start_measure_time() { clock_gettime(CLOCK_MONOTONIC_RAW, &start); }
 

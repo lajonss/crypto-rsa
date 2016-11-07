@@ -10,6 +10,7 @@ void erreof(int x);
 void openssl_errhandle();
 void openssl_errnull(int x);
 void openssl_errneg(int x);
+void openssl_errzero(int x, char *place);
 
 void start_measure_time();
 uint64_t stop_measure_time();
