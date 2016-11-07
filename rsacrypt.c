@@ -62,7 +62,7 @@ void read_verify_key();
 void decrypt_file(char *filename);
 void encrypt_file(char *filename);
 void sign_file(char *filename, char *out_filename);
-void verify_file(char *filename);
+void verify_file(char *filename, char *out_filename);
 
 int main(int argc, char **argv) {
   srand(76);
@@ -149,8 +149,14 @@ int main(int argc, char **argv) {
     }
   } else if (mode_verify) {
     read_verify_key();
-    while(optind < argc)
-      verify_file(argv[optind++]);
+    while(optind < argc) {
+      char *filename = argv[optind++];
+      if(optind == argc) {
+        fprintf(stderr, "Unpaired.\n");
+        exit(-1);
+      }
+      verify_file(filename, argv[optind++]);
+    }
   }
 
   if (key)
@@ -358,7 +364,9 @@ void sign_file(char *filename, char *out_filename) {
 
   unsigned char buffer_out[key_length];
   unsigned int key_len = key_length;
-  openssl_errnull(RSA_sign(NID_sha512, in_buffer, SHA_CHUNK, buffer_out, &key_len, key));
+  unsigned int message_size = 64;
+  int ret = RSA_sign(NID_sha512, in_buffer, message_size, buffer_out, &key_len, key);
+  openssl_errnull(ret);
 
   FILE *out = fopen(out_filename, "wb");
   errnull(out);
@@ -366,8 +374,39 @@ void sign_file(char *filename, char *out_filename) {
   erreof(fclose(out));
 }
 
-void verify_file(char *filename) {
+void verify_file(char *filename, char *out_filename) {
+  SHA512_CTX ctx;
+  openssl_errzero(SHA512_Init(&ctx), "SHA512_Init");
 
+  FILE *in = fopen(filename, "rb");
+  errnull(in);
+  unsigned char in_buffer[SHA_CHUNK];
+  int rd;
+  do {
+    rd = fread(in_buffer, sizeof(unsigned char), SHA_CHUNK, in);
+    if(rd > 0) {
+      openssl_errzero(SHA512_Update(&ctx, in_buffer, rd), "SHA512_Update");
+    }
+  } while (rd == SHA_CHUNK);
+  erreof(fclose(in));
+
+  openssl_errzero(SHA512_Final(in_buffer, &ctx), "SHA512_Final");
+
+  FILE *sign = fopen(out_filename, "rb");
+  errnull(sign);
+  fseek(sign, 0, SEEK_END);
+  unsigned int siglen = ftell(sign);
+  fseek(sign, 0, SEEK_SET);
+
+  unsigned char *buffer_out = (unsigned char *)malloc(siglen);
+  fread(buffer_out, 1, siglen, sign);
+  erreof(fclose(sign));
+
+  unsigned int message_size = 64;
+  int ret = RSA_verify(NID_sha512, in_buffer, message_size, buffer_out, siglen, key);
+  openssl_errnull(ret);
+
+  free(buffer_out);
 }
 
 void read_sign_key() {
